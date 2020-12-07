@@ -15,6 +15,8 @@ import (
 	"reflect"
 	"time"
 
+	"golang.org/x/time/rate"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/mitchellh/mapstructure"
@@ -36,6 +38,9 @@ type Client struct {
 	url string
 	uri string
 
+	// Rate Limiter
+	limiter *rate.Limiter
+	//
 	RequestCount int
 	ErrorCount   int
 
@@ -62,6 +67,14 @@ type Fault struct {
 	String  string   `xml:"faultstring,omitempty"`
 	Actor   string   `xml:"faultactor,omitempty"`
 	Detail  string   `xml:"detail,omitempty"`
+}
+
+// NewRateLimitedClient return soap/http cleint with rate limit on
+func NewRateLimitedClient(url string, uri string, events, bursts int) *Client {
+	c := NewClient(url, uri)
+	limit := rate.Limit(events)
+	c.limiter = rate.NewLimiter(limit, bursts)
+	return c
 }
 
 // NewClient return soap/http cleint
@@ -126,6 +139,10 @@ func (c *Client) Auth(username string, password string) error {
 // Call SOAP client API call
 func (c *Client) Call(soapActionName string, request interface{}) (*Response, error) {
 
+	if c.limiter.Allow() == false {
+		return nil, fmt.Error("client request limit reached, try again after some delay")
+	}
+
 	// Build envelope
 	buffer := new(bytes.Buffer)
 	encoder := xml.NewEncoder(buffer)
@@ -189,7 +206,7 @@ func (c *Client) Call(soapActionName string, request interface{}) (*Response, er
 		if soapActionName != "authenticate" {
 			c.ErrorCount++
 		}
-		return nil, fmt.Errorf("Failed to send request. Error:%v", err)
+		return nil, fmt.Errorf("Failed to send request. Error:%v", err)yy
 	}
 
 	c.ErrorCount = 0
