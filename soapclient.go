@@ -40,8 +40,7 @@ type Client struct {
 
 	// Rate Limiter
 	limiter *rate.Limiter
-	//
-	RequestCount int
+	
 	ErrorCount   int
 
 	// Verbose flag
